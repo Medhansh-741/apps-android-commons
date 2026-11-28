@@ -46,6 +46,28 @@ private val permanentUploadErrors =
  */
 internal fun isPermanentUploadError(errorInfo: String?): Boolean = errorInfo in permanentUploadErrors
 
+/**
+ * Server error codes after which the chunks already in the stash can not be used any more.
+ */
+internal val stashErrorCodes =
+    listOf(
+        "uploadstash-file-not-found",
+        "stashfailed",
+        "verification-error",
+        "chunk-too-small",
+    )
+
+/**
+ * Returns true when an upload that went on from its saved chunks failed with a stash error.
+ * When the app is killed while a chunk is being sent, the server can still receive that chunk,
+ * so the saved offset is behind and the next chunk fails with "Invalid chunk offset".
+ * Sending the file again from the first chunk fixes it.
+ */
+internal fun restartsFromFirstChunk(
+    resumedFromChunks: Boolean,
+    errorCode: String?,
+): Boolean = resumedFromChunks && errorCode in stashErrorCodes
+
 private const val HTTP_TOO_MANY_REQUESTS = 429
 private const val HTTP_SERVER_ERROR_FIRST = 500
 private const val HTTP_SERVER_ERROR_LAST = 599

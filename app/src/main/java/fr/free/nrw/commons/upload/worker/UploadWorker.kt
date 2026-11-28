@@ -90,14 +90,6 @@ class UploadWorker(
 
     private val statesToProcess = ArrayList<Int>()
 
-    private val stashErrorCodes =
-        listOf(
-            "uploadstash-file-not-found",
-            "stashfailed",
-            "verification-error",
-            "chunk-too-small",
-        )
-
     init {
         ApplicationlessInjection
             .getInstance(appContext)
@@ -167,7 +159,11 @@ class UploadWorker(
                     CommonsApplication.NOTIFICATION_CHANNEL_ID_UPLOADS,
                 )
             withContext(Dispatchers.IO) {
-                while (contributionDao
+                // Stop taking new uploads once this worker is stopped. A blocking upload
+                // keeps running after the coroutine is cancelled, so without this check
+                // a stopped worker could keep looping next to the one replacing it.
+                while (!isStopped &&
+                    contributionDao
                         .getContribution(statesToProcess)
                         .blockingGet()
                         .size > 0 &&
@@ -212,7 +208,8 @@ class UploadWorker(
                     val sortedQueuedContributionsList: List<Contribution> =
                         queuedContributions.sortedBy { it.dateUploadStartedInMillis() }
 
-                    var contribution = sortedQueuedContributionsList.first()
+                    // The queue can change between the loop check and this query
+                    var contribution = sortedQueuedContributionsList.firstOrNull() ?: break
 
                     if (contributionDao.getContribution(contribution.pageId) != null) {
                         contribution.transferred = 0
@@ -328,6 +325,7 @@ class UploadWorker(
                 contribution,
             )
 
+        val resumedFromChunks = contribution.chunkInfo != null
         try {
             // Upload the file to stash
             val stashUploadResult =
@@ -409,8 +407,17 @@ class UploadWorker(
                 else -> {
                     Timber.e("""upload file to stash failed with status: ${stashUploadResult.state}""")
 
-                    contribution.state = Contribution.STATE_FAILED
                     contribution.chunkInfo = null
+                    if (restartsFromFirstChunk(resumedFromChunks, stashUploadResult.errorMessage)) {
+                        // Put it back in the queue without its chunks, so the loop sends it again
+                        // from the start. It has no chunks now, so this happens only once.
+                        Timber.w("Resumed upload failed with %s, sending it again", stashUploadResult.errorMessage)
+                        contribution.state = Contribution.STATE_QUEUED
+                        contribution.transferred = 0
+                        contributionDao.saveSynchronous(contribution)
+                        return
+                    }
+                    contribution.state = Contribution.STATE_FAILED
                     contribution.errorInfo = stashUploadResult.errorMessage
                     contribution.setRetryWait(stashUploadResult.retryAfterMillis)
                     notificationHelper.showErrorNotification(contribution)

@@ -184,6 +184,23 @@ class UploadErrorsTest {
         assertEquals(30_000L, HttpException(response).retryAfterMillis())
     }
 
+    @Test
+    fun `restartsFromFirstChunk when a resumed upload gets an invalid chunk offset`() {
+        // MediaWiki answers "stashfailed" with "Invalid chunk offset" when it already has the chunk
+        assertTrue(restartsFromFirstChunk(resumedFromChunks = true, errorCode = "stashfailed"))
+    }
+
+    @Test
+    fun `restartsFromFirstChunk not for an upload that started from the first chunk`() {
+        assertFalse(restartsFromFirstChunk(resumedFromChunks = false, errorCode = "stashfailed"))
+    }
+
+    @Test
+    fun `restartsFromFirstChunk not for other errors`() {
+        assertFalse(restartsFromFirstChunk(resumedFromChunks = true, errorCode = "filetype-banned"))
+        assertFalse(restartsFromFirstChunk(resumedFromChunks = true, errorCode = null))
+    }
+
     private companion object {
         const val NOW = 1_000_000_000_000L
         const val FRIENDLY_503 = "Commons could not handle the request right now. Please try again later. (HTTP 503)"

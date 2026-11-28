@@ -75,7 +75,7 @@ slf4jApi = "1.7.25"
 soloader = "0.10.5"
 timber = "4.7.1"
 uiautomator = "2.2.0"
-workManager = "2.8.1"
+workManager = "2.10.5"
 
 [libraries]
 # AndroidX Core Dependencies
