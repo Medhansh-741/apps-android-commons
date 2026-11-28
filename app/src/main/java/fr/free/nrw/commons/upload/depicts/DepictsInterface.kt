@@ -1,5 +1,6 @@
 package fr.free.nrw.commons.upload.depicts
 
+import fr.free.nrw.commons.wikidata.model.DepictFullTextSearchResponse
 import fr.free.nrw.commons.wikidata.model.DepictSearchResponse
 import fr.free.nrw.commons.wikidata.model.Entities
 import io.reactivex.Single
@@ -26,6 +27,18 @@ interface DepictsInterface {
         @Query("uselang") uselang: String?,
         @Query("continue") offset: String?,
     ): Single<DepictSearchResponse>
+
+    /**
+     * Search for depictions with the full-text search used by the Wikidata website, which also
+     * finds items whose words are not at the start of their label
+     * @param query search for depictions based on user query
+     * @param limit number of depictions to be retrieved
+     */
+    @GET("/w/api.php?action=query&format=json&list=search&srnamespace=0")
+    fun searchForDepictsByText(
+        @Query("srsearch") query: String?,
+        @Query("srlimit") limit: String?,
+    ): Single<DepictFullTextSearchResponse>
 
     @GET("/w/api.php?format=json&action=wbgetentities")
     fun getEntities(

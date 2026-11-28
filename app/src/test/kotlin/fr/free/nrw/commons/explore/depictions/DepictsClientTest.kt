@@ -1,6 +1,9 @@
 package fr.free.nrw.commons.explore.depictions
 
+import com.nhaarman.mockitokotlin2.any
 import com.nhaarman.mockitokotlin2.mock
+import com.nhaarman.mockitokotlin2.never
+import com.nhaarman.mockitokotlin2.verify
 import com.nhaarman.mockitokotlin2.whenever
 import depictSearchItem
 import entity
@@ -10,6 +13,7 @@ import fr.free.nrw.commons.mwapi.SparqlResponse
 import fr.free.nrw.commons.upload.depicts.DepictsInterface
 import fr.free.nrw.commons.upload.structure.depictions.DepictedItem
 import fr.free.nrw.commons.wikidata.model.DataValue
+import fr.free.nrw.commons.wikidata.model.DepictFullTextSearchResponse
 import fr.free.nrw.commons.wikidata.model.DepictSearchResponse
 import fr.free.nrw.commons.wikidata.model.Entities
 import fr.free.nrw.commons.wikidata.model.SnakPartial
@@ -20,6 +24,7 @@ import org.junit.Before
 import org.junit.Test
 import org.mockito.Mock
 import org.mockito.MockitoAnnotations
+import java.io.IOException
 import java.lang.reflect.Method
 
 class DepictsClientTest {
@@ -39,6 +44,8 @@ class DepictsClientTest {
         whenever(depictsInterface.searchForDepicts("query", "1", "en", "en", "0"))
             .thenReturn(Single.just(depictSearchResponse))
         whenever(depictSearchResponse.search).thenReturn(listOf(depictSearchItem("1"), depictSearchItem("2")))
+        whenever(depictsInterface.searchForDepictsByText("query", "1"))
+            .thenReturn(Single.just(DepictFullTextSearchResponse(null)))
         val entities = mock<Entities>()
         whenever(depictsInterface.getEntities("1|2")).thenReturn(Single.just(entities))
         whenever(entities.getEntityMap()).thenReturn(emptyMap())
@@ -47,6 +54,80 @@ class DepictsClientTest {
             .test()
             .assertValue(emptyList())
     }
+
+    @Test
+    fun `searchForDepictions adds full-text matches after the label matches`() {
+        givenLabelMatches("Q1", "Q2")
+        whenever(depictsInterface.searchForDepictsByText("Paris Texas", "25"))
+            .thenReturn(Single.just(textMatches("Q2", "Q3")))
+        val entities = mock<Entities>()
+        whenever(depictsInterface.getEntities("Q1|Q2|Q3")).thenReturn(Single.just(entities))
+        whenever(entities.getEntityMap()).thenReturn(emptyMap())
+
+        depictsClient.searchForDepictions("Paris Texas", 25, 0).test().assertNoErrors()
+
+        verify(depictsInterface).getEntities("Q1|Q2|Q3")
+    }
+
+    @Test
+    fun `searchForDepictions keeps the label matches when the full-text search fails`() {
+        givenLabelMatches("Q1", "Q2")
+        whenever(depictsInterface.searchForDepictsByText("Paris Texas", "25"))
+            .thenReturn(Single.error(IOException("no network")))
+        val entities = mock<Entities>()
+        whenever(depictsInterface.getEntities("Q1|Q2")).thenReturn(Single.just(entities))
+        whenever(entities.getEntityMap()).thenReturn(emptyMap())
+
+        depictsClient.searchForDepictions("Paris Texas", 25, 0).test().assertNoErrors()
+
+        verify(depictsInterface).getEntities("Q1|Q2")
+    }
+
+    @Test
+    fun `searchForDepictions asks for at most 50 items at once`() {
+        val labels = (1..40).map { "Q$it" }
+        givenLabelMatches(*labels.toTypedArray(), limit = "50")
+        whenever(depictsInterface.searchForDepictsByText("Paris Texas", "50"))
+            .thenReturn(Single.just(textMatches(*(41..60).map { "Q$it" }.toTypedArray())))
+        val ids = (1..50).joinToString("|") { "Q$it" }
+        val entities = mock<Entities>()
+        whenever(depictsInterface.getEntities(ids)).thenReturn(Single.just(entities))
+        whenever(entities.getEntityMap()).thenReturn(emptyMap())
+
+        depictsClient.searchForDepictions("Paris Texas", 50, 0).test().assertNoErrors()
+
+        verify(depictsInterface).getEntities(ids)
+    }
+
+    @Test
+    fun `searchForDepictions skips the full-text search after the first page`() {
+        val response = mock<DepictSearchResponse>()
+        whenever(depictsInterface.searchForDepicts("Paris Texas", "25", "en", "en", "25"))
+            .thenReturn(Single.just(response))
+        whenever(response.search).thenReturn(listOf(depictSearchItem("Q26")))
+        val entities = mock<Entities>()
+        whenever(depictsInterface.getEntities("Q26")).thenReturn(Single.just(entities))
+        whenever(entities.getEntityMap()).thenReturn(emptyMap())
+
+        depictsClient.searchForDepictions("Paris Texas", 25, 25).test().assertNoErrors()
+
+        verify(depictsInterface, never()).searchForDepictsByText(any(), any())
+    }
+
+    private fun givenLabelMatches(
+        vararg ids: String,
+        limit: String = "25",
+    ) {
+        val response = mock<DepictSearchResponse>()
+        whenever(depictsInterface.searchForDepicts("Paris Texas", limit, "en", "en", "0"))
+            .thenReturn(Single.just(response))
+        whenever(response.search).thenReturn(ids.map { depictSearchItem(it) })
+    }
+
+    private fun textMatches(vararg ids: String) =
+        DepictFullTextSearchResponse(
+            DepictFullTextSearchResponse.Query(ids.map { DepictFullTextSearchResponse.Result(it) }),
+        )
 
     @Test
     fun getEntities() {

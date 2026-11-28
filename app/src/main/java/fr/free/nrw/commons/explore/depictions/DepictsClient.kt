@@ -16,6 +16,9 @@ import java.util.Locale
 import javax.inject.Inject
 import javax.inject.Singleton
 
+// wbgetentities accepts at most 50 ids per request
+private const val MAX_ENTITIES_PER_REQUEST = 50
+
 /**
  * Depicts Client to handle custom calls to Commons Wikibase APIs
  */
@@ -35,11 +38,36 @@ class DepictsClient
             offset: Int,
         ): Single<List<DepictedItem>> {
             val language = Locale.getDefault().language
-            return depictsInterface
-                .searchForDepicts(query, "$limit", language, language, "$offset")
-                .map { it.search.joinToString("|", transform = DepictSearchItem::id) }
+            val labelMatches =
+                depictsInterface
+                    .searchForDepicts(query, "$limit", language, language, "$offset")
+                    .map { it.search.map(DepictSearchItem::id) }
+            // Only the first page gets the full-text results, so later pages don't repeat them
+            val ids =
+                if (offset == 0) {
+                    labelMatches.zipWith(textMatches(query, limit)) { labels, text ->
+                        (labels + text).distinct().take(MAX_ENTITIES_PER_REQUEST)
+                    }
+                } else {
+                    labelMatches
+                }
+            return ids
+                .map { it.joinToString("|") }
                 .mapToDepictions()
         }
+
+        /**
+         * Items found by the Wikidata website's full-text search, for searches like "Paris Texas"
+         * that match no label from its start. If this search fails, the label matches still show.
+         */
+        private fun textMatches(
+            query: String?,
+            limit: Int,
+        ): Single<List<String>> =
+            depictsInterface
+                .searchForDepictsByText(query, "$limit")
+                .map { it.ids() }
+                .onErrorReturnItem(emptyList())
 
         fun getEntities(ids: String): Single<Entities> = depictsInterface.getEntities(ids)
 
