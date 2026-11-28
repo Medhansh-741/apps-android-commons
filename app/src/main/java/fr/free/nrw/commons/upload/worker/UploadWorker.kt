@@ -20,6 +20,7 @@ import fr.free.nrw.commons.Media
 import fr.free.nrw.commons.R
 import fr.free.nrw.commons.auth.SessionManager
 import fr.free.nrw.commons.auth.csrf.CsrfTokenClient
+import fr.free.nrw.commons.category.CategoryRedirectResolver
 import fr.free.nrw.commons.contributions.ChunkInfo
 import fr.free.nrw.commons.contributions.Contribution
 import fr.free.nrw.commons.contributions.ContributionDao
@@ -86,6 +87,9 @@ class UploadWorker(
 
     @Inject
     lateinit var notificationHelper: UploadNotificationHelper
+
+    @Inject
+    lateinit var categoryRedirectResolver: CategoryRedirectResolver
 
     private val processingUploadsNotificationTag = BuildConfig.APPLICATION_ID + " : upload_tag"
 
@@ -356,6 +360,11 @@ class UploadWorker(
                     val uniqueFileName = findUniqueFileName(filename)
 
                     try {
+                        // Save the file under the categories that redirect categories point to
+                        media.categories?.let { categories ->
+                            media.categories = categoryRedirectResolver.resolve(categories).blockingGet()
+                        }
+
                         // Upload the file from stash
                         val uploadResult =
                             uploadClient
