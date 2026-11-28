@@ -7,7 +7,6 @@ import android.view.View
 import android.view.ViewGroup
 import androidx.paging.PagedList
 import androidx.recyclerview.widget.LinearLayoutManager
-import fr.free.nrw.commons.CommonsApplication
 import fr.free.nrw.commons.R
 import fr.free.nrw.commons.contributions.Contribution
 import fr.free.nrw.commons.contributions.Contribution.Companion.STATE_IN_PROGRESS
@@ -39,8 +38,6 @@ class PendingUploadsFragment :
     private lateinit var adapter: PendingUploadsAdapter
 
     private var contributionsSize = 0
-
-    private var contributionsList = mutableListOf<Contribution>()
 
     override fun onAttach(context: Context) {
         super.onAttach(context)
@@ -83,18 +80,6 @@ class PendingUploadsFragment :
         pendingUploadsPresenter.totalContributionList
             .observe(viewLifecycleOwner) { list: PagedList<Contribution> ->
                 contributionsSize = list.size
-                contributionsList = mutableListOf()
-                var pausedOrQueuedUploads = 0
-                list.forEach {
-                    if (it != null) {
-                        if (it.state in setOf(STATE_PAUSED, STATE_QUEUED, STATE_IN_PROGRESS, STATE_METADATA_PENDING)) {
-                            contributionsList.add(it)
-                        }
-                        if (it.state in setOf(STATE_PAUSED, STATE_QUEUED, STATE_METADATA_PENDING)) {
-                            pausedOrQueuedUploads++
-                        }
-                    }
-                }
                 if (contributionsSize == 0) {
                     binding.nopendingTextView.visibility = View.VISIBLE
                     binding.pendingUplaodsLl.visibility = View.GONE
@@ -104,12 +89,13 @@ class PendingUploadsFragment :
                     binding.pendingUplaodsLl.visibility = View.VISIBLE
                     adapter.submitList(list)
                     binding.progressTextView.setText("$contributionsSize uploads left")
-                    if ((pausedOrQueuedUploads == contributionsSize) || CommonsApplication.isPaused) {
-                        uploadProgressActivity.setPausedIcon(true)
-                    } else {
-                        uploadProgressActivity.setPausedIcon(false)
-                    }
                 }
+            }
+        // Read from the database, because the list only holds the rows loaded so far, and
+        // CommonsApplication.isPaused is lost when the app is restarted.
+        pendingUploadsPresenter.pausedContributionList
+            .observe(viewLifecycleOwner) { pausedList: PagedList<Contribution> ->
+                uploadProgressActivity.setPausedIcon(pausedList.size > 0)
             }
     }
 
@@ -140,9 +126,8 @@ class PendingUploadsFragment :
      * Restarts all the paused uploads.
      */
     fun restartUploads() =
-        pendingUploadsPresenter.restartUploads(
-            contributionsList,
-            0,
+        pendingUploadsPresenter.restartUploadsWithState(
+            STATE_PAUSED,
             requireContext().applicationContext,
         )
 

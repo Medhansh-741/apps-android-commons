@@ -6,6 +6,7 @@ import fr.free.nrw.commons.Media
 import fr.free.nrw.commons.contributions.Contribution
 import fr.free.nrw.commons.contributions.Contribution.Companion.STATE_FAILED
 import fr.free.nrw.commons.contributions.Contribution.Companion.STATE_METADATA_PENDING
+import fr.free.nrw.commons.contributions.Contribution.Companion.STATE_PAUSED
 import fr.free.nrw.commons.contributions.Contribution.Companion.STATE_QUEUED
 import fr.free.nrw.commons.contributions.ContributionsRepository
 import fr.free.nrw.commons.repository.UploadRepository
@@ -69,9 +70,26 @@ class PendingUploadsPresenterTest {
             contributionsRepository.getAllContributionsWithStates(listOf(STATE_FAILED))
         } returns Single.just(failedContributions)
 
-        presenter.restartFailedUploads(context)
+        presenter.restartUploadsWithState(STATE_FAILED, context)
 
         failedContributions.forEach { assertEquals(STATE_QUEUED, it.state) }
+        verify(exactly = 40) { contributionsRepository.save(any<Contribution>()) }
+    }
+
+    /**
+     * Test that resuming queues every paused upload stored in the database, not only the ones
+     * loaded in the list on the screen
+     */
+    @Test
+    fun testRestartPausedUploadsQueuesEveryPausedUpload() {
+        val pausedContributions = List(40) { failedContribution().apply { state = STATE_PAUSED } }
+        every {
+            contributionsRepository.getAllContributionsWithStates(listOf(STATE_PAUSED))
+        } returns Single.just(pausedContributions)
+
+        presenter.restartUploadsWithState(STATE_PAUSED, context)
+
+        pausedContributions.forEach { assertEquals(STATE_QUEUED, it.state) }
         verify(exactly = 40) { contributionsRepository.save(any<Contribution>()) }
     }
 

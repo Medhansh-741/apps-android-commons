@@ -42,6 +42,7 @@ class PendingUploadsPresenter
 
         lateinit var totalContributionList: LiveData<PagedList<Contribution>>
         lateinit var failedContributionList: LiveData<PagedList<Contribution>>
+        lateinit var pausedContributionList: LiveData<PagedList<Contribution>>
 
         /**
          * Setups the paged list of Pending Uploads. This method sets the configuration for paged list
@@ -62,6 +63,11 @@ class PendingUploadsPresenter
                     sortedByDateUploadStarted = true,
                 )
             totalContributionList = LivePagedListBuilder(factory, pagedListConfig).build()
+            pausedContributionList =
+                LivePagedListBuilder(
+                    contributionsRepository.fetchContributionsWithStates(listOf(STATE_PAUSED)),
+                    pagedListConfig,
+                ).build()
         }
 
         /**
@@ -147,18 +153,23 @@ class PendingUploadsPresenter
         }
 
         /**
-         * Restarts all the failed uploads. They are read from the database, because the list
-         * shown on the screen only contains the ones that have been loaded so far.
+         * Restarts all the uploads in the given state, like all the failed or all the paused ones.
+         * They are read from the database, because the list shown on the screen only contains the
+         * ones that have been loaded so far.
          *
+         * @param state   The state of the uploads to restart.
          * @param context The context in which the operation is being performed.
          */
-        fun restartFailedUploads(context: Context) {
+        fun restartUploadsWithState(
+            state: Int,
+            context: Context,
+        ) {
             compositeDisposable.add(
                 contributionsRepository
-                    .getAllContributionsWithStates(listOf(STATE_FAILED))
+                    .getAllContributionsWithStates(listOf(state))
                     .subscribeOn(ioThreadScheduler)
                     .subscribe(
-                        { failedContributions -> restartUploads(failedContributions, 0, context) },
+                        { contributions -> restartUploads(contributions, 0, context) },
                         { throwable -> Timber.e(throwable) },
                     ),
             )

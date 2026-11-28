@@ -142,13 +142,19 @@ class PendingUploadsAdapter(
             bindProgress(contribution.transferred, contribution.dataLength, contribution.state)
         }
 
+        /**
+         * Paused uploads say "Paused", the others that are waiting say "Queued".
+         */
+        private fun waitingText(state: Int): String =
+            if (state == Contribution.STATE_PAUSED) itemView.context.getString(R.string.paused) else "Queued"
+
         fun bindState(state: Int) {
             if (state == Contribution.STATE_METADATA_PENDING) {
                 errorTextView.setText(R.string.upload_metadata_pending)
                 errorTextView.visibility = View.VISIBLE
                 itemProgress.visibility = View.GONE
             } else if (state == Contribution.STATE_QUEUED || state == Contribution.STATE_PAUSED) {
-                errorTextView.text = "Queued"
+                errorTextView.text = waitingText(state)
                 errorTextView.visibility = View.VISIBLE
                 itemProgress.visibility = View.GONE
             } else {
@@ -165,12 +171,12 @@ class PendingUploadsAdapter(
             if (state == Contribution.STATE_METADATA_PENDING) {
                 bindState(state)
             } else if (transferred == 0L) {
-                errorTextView.text = "Queued"
+                errorTextView.text = waitingText(state)
                 errorTextView.visibility = View.VISIBLE
                 itemProgress.visibility = View.GONE
             } else {
                 if (state == Contribution.STATE_QUEUED || state == Contribution.STATE_PAUSED) {
-                    errorTextView.text = "Queued"
+                    errorTextView.text = waitingText(state)
                     errorTextView.visibility = View.VISIBLE
                     itemProgress.visibility = View.GONE
                 } else {

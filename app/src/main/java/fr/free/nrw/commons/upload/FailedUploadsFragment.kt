@@ -118,7 +118,8 @@ class FailedUploadsFragment :
      */
     fun restartUploads() {
         ViewUtil.showShortToast(context, R.string.retrying_failed_uploads)
-        pendingUploadsPresenter.restartFailedUploads(
+        pendingUploadsPresenter.restartUploadsWithState(
+            STATE_FAILED,
             requireContext().applicationContext,
         )
     }

@@ -4,6 +4,7 @@ import android.content.Context
 import androidx.test.core.app.ApplicationProvider
 import com.nhaarman.mockitokotlin2.any
 import com.nhaarman.mockitokotlin2.doReturn
+import com.nhaarman.mockitokotlin2.eq
 import com.nhaarman.mockitokotlin2.mock
 import com.nhaarman.mockitokotlin2.spy
 import com.nhaarman.mockitokotlin2.verify
@@ -11,6 +12,7 @@ import com.nhaarman.mockitokotlin2.whenever
 import fr.free.nrw.commons.R
 import fr.free.nrw.commons.TestCommonsApplication
 import fr.free.nrw.commons.contributions.Contribution
+import fr.free.nrw.commons.contributions.Contribution.Companion.STATE_FAILED
 import org.junit.Assert.assertEquals
 import org.junit.Before
 import org.junit.Test
@@ -50,6 +52,6 @@ class FailedUploadsFragmentTest {
         fragment.restartUploads()
 
         assertEquals(context.getString(R.string.retrying_failed_uploads), ShadowToast.getTextOfLatestToast())
-        verify(presenter).restartFailedUploads(any())
+        verify(presenter).restartUploadsWithState(eq(STATE_FAILED), any())
     }
 }
